@@ -3,8 +3,8 @@
 % Author: Simon Bertling, 2018
 %
 % Known problems:
-% - As the data comes in quite randomly, the data columns and plot colors also 
-% get messed up
+% - When not using_tail, the data comes in quite randomly. The data columns and 
+%   plot colors get messed up
 % - When using a FIFO, the data is not buffered and thus not updated immediately
 % - When reading from shm, the datafile might get quite big
 % - Only tested on Linux
@@ -15,43 +15,53 @@ more off;
 
 N_values = 3;
 N_data_read = 1000;
+N_bytes_per_value = 5; % must be worst case
 
 Ts = 1e-3;
 Fs = 1/Ts;
 t = 0:Ts:N_data_read*Ts;
 
-use_fifo = 1;
+use_fifo = 0;
 use_log_fft = 1;
+use_tail = 1;
 
 fname_fifo = "/home/simon/fifo";
+%fname_fifo = "/dev/ttyUSB0";
 fname_shm = "/dev/shm/data";
+cmd_str = ["tail -n" num2str(N_data_read) " " fname_shm];
 
 if use_fifo
   try
     fprintf("Opening FIFO %s...\n", fname_fifo);
-    fid = fopen("/home/simon/fifo", "r");
+    fid = fopen(fname_fifo, "r");
     fprintf("FIFO opened. ID = %d\n", fid);
   catch
     error "Could not read from FIFO";
   end
 else
-  fprintf("Reading from %s...", fname_shm);
+  fprintf("Reading from %s...\n", fname_shm);
 end
 
-cycle = 0;
-while(1)
-  cycle = cycle+1;
+%% Main loop
+%  The loop will end as soon as the plot handle gets destroyed
+fig = figure();
+while ishandle(fig)
   try
     if use_fifo
       s = fscanf(fid,"%d",N_data_read*N_values);
     else
-      fid = fopen(fname_shm);
-      fseek(fid,-N_data_read*N_values*3,SEEK_END());
+      if use_tail
+        fid = popen(cmd_str,"r");
+      else
+        fid = fopen(fname_shm);
+        % Only read the end of the file
+        fseek(fid,-N_data_read*N_values*N_bytes_per_value,SEEK_END());
+      end
       s = fscanf(fid,"%d");
       fclose(fid);
       if length(s) < 1
         warning "Read length is too small. Continuing..."
-        pause(1);
+        pause(.5);
         continue
       end
     end
@@ -66,7 +76,8 @@ while(1)
     N_data = floor(N_s/N_values);
     s = s(1:N_data*N_values);
     y = reshape(s,N_values,N_data)';
-    y = y(2:end-1,:); % do not trust the first and last values
+    %y = y(2:end-1,:); % do not trust the first and last values
+    y = y(max(end-N_data_read,2):end-1,:); % do not trust the first and last values
     y = y/1024*5; % Scale to voltage
     N_y = length(y);
     
@@ -84,10 +95,12 @@ while(1)
     f = 0:dF:Fs-dF;
     f = f(1:N_Y_plot);
     
-    % Plot time
+    % Plot against time
     subplot(2,1,1);
     stairs(t(1:N_y),y);
+    xlim([t(1) t(end)]);
     ylim([0 5]);
+    grid on;
     
     % Plot FFT
     subplot(2,1,2);
@@ -103,8 +116,14 @@ while(1)
   end
 
   % Update screen
-  pause(0.01);
+  refresh();
 end
+
+disp("Closing...");
+try
+  fclose(fid);
+end
+disp("Script done");
 
 %try
 %  pkg load instrument-control
