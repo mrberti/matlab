@@ -13,7 +13,7 @@ clear variables;
 close all;
 more off;
 
-N_data_read = 1000;
+N_data_read = 6000;
 
 Ts = 1;
 Fs = 1/Ts;
@@ -22,7 +22,7 @@ t = 0:Ts:N_data_read*Ts;
 use_log_fft = 1;
 use_time_stamps = 1;
 
-fname = "data.csv";
+fname = "/dev/shm/data";
 cmd_str = ["tail -n" num2str(N_data_read) " " fname];
 fprintf("Reading from %s...\n", fname);
 
@@ -30,7 +30,7 @@ fprintf("Reading from %s...\n", fname);
 %% Main loop
 %  The loop will end as soon as the plot handle gets destroyed
 fig = figure();
-##while ishandle(fig)
+while ishandle(fig)
   try
       fid = popen(cmd_str,"r");
       y = csvread(fid);
@@ -47,11 +47,12 @@ fig = figure();
 
 ##  try
     % shape data vectors
-    y = y(max(end-N_data_read,2):end-1,:); % do not trust the first and last values
+##    y = y(max(end-N_data_read,2):end-1,:); % do not trust the first and last values
     N_y = length(y);
     if use_time_stamps
       t = y(:,1);
-      y = y(:,2);
+      t = t-t(1);
+      y = y(:,2:end);
     end
     
     % FFT
@@ -69,20 +70,20 @@ fig = figure();
     f = f(1:N_Y_plot);
     
     % Plot against time
-##    subplot(2,1,1);
-##    stairs(t(1:N_y),y);
-##    xlim([t(1) t(end)]);
+    subplot(2,1,1);
+    stairs(t(1:N_y),y);
+    xlim([t(1) t(end)]);
 ##    ylim([0 5]);
 ##    grid on;
 ##    
-##    % Plot FFT
-##    subplot(2,1,2);
-##    stairs(f,Y_plot);
-##    if use_log_fft
-##      ylim([-60 10]);
-##    else
-##      ylim([0 1]);
-##    end
+    % Plot FFT
+    subplot(2,1,2);
+    stairs(f,Y_plot);
+    if use_log_fft
+      ylim([-60 10]);
+    else
+      ylim([0 1]);
+    end
 ##    grid on;
 ##  catch
 ##    warning "An error occured during data processing. Continuing...";
@@ -91,7 +92,7 @@ fig = figure();
   % Update screen
   refresh();
   pause(1);
-##end
+end
 
 disp("Closing...");
 try
